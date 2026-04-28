@@ -1,0 +1,183 @@
+# =============================================================================
+# autobench 单文件配置：这里设完保存，直接 ./run.sh 就开跑，不需要任何命令行参数。
+# =============================================================================
+
+# --------- 1. Docker / 宿主机环境 ---------
+# 不同机器模型放的位置可能不同，改这里即可。
+docker:
+  image: amr-registry.caas.intel.com/intelanalytics/llm-scaler-vllm:0.14.0-b8.3-0427
+  host_model_dir: /home/intel/weights      # 宿主机上模型根目录（会挂进 container 的 container_model_dir）
+  container_model_dir: /llm/models
+  host_work_dir: /home/sdf/shaojun        # 可选：把代码/脚本挂进 container
+  container_work_dir: /llm/shaojun
+  host_tmp_dir: /tmp
+  container_tmp_dir: /tmp
+  shm_size: 32g
+  http_proxy: http://proxy.iil.intel.com:911
+  https_proxy: http://proxy.iil.intel.com:911
+  no_proxy: localhost,127.0.0.1
+
+# --------- 2. 服务启动的通用默认（所有模型继承，每个模型可覆盖）---------
+server_defaults:
+  port: 9005
+  startup_timeout_sec: 1200                # 20 分钟
+  env:
+    VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+    VLLM_WORKER_MULTIPROC_METHOD: spawn
+    PYTORCH_ALLOC_CONF: "expandable_segments:True"
+  args:
+    dtype: float16
+    enforce-eager: true
+    host: 0.0.0.0
+    trust-remote-code: true
+    disable-sliding-window: true
+    gpu-memory-util: 0.9
+    no-enable-prefix-caching: true
+    block-size: 64
+
+# --------- 3. 测试项开关 + 默认参数 ---------
+# 每个模型可在 models[].tests 里覆盖这里的任何字段。
+tests:
+  gsm8k:
+    enabled: true
+    num_questions: 100
+    timeout_sec: 1800
+  perf:
+    enabled: true
+    concurrency: [1, 4]
+    input_len: [1024, 8192, 16384, 32768, 65536]
+    # input_len: [1024, 8192]
+    output_len: [1024]
+    num_prompts_multiplier: 1      # num-prompt = concurrency × 此值；=1 即和并发一样
+    request_rate: inf
+    timeout_sec: 3600
+
+# --------- 4. 模型列表 ---------
+# - name 必须和 host_model_dir 下的子目录名一致，除非显式写 model_path
+# - 只写需要覆盖 server_defaults 或 tests 的字段
+models:
+
+
+  # - name: Qwen3.6-27B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 2
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: sym_int4
+  #   # 可选：这一模型单独裁剪测试矩阵（例：不跑 65536）
+  #   # tests:
+  #   #   perf:
+  #   #     input_len: [1024, 2048, 8192, 16384, 32768]
+
+  # - name: Qwen3.6-27B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: fp8
+
+  # 复制一条，改 name / ze_affinity_mask / server.args 即可加新模型
+  - name: Qwen3.6-35B-A3B
+    ze_affinity_mask: "0,1,2,3"
+    server:
+      args:
+        tensor-parallel-size: 4
+        max-model-len: 8192
+        max-num-batched-tokens: 4096
+        quantization: sym_int4
+
+  - name: Qwen3.6-35B-A3B
+    ze_affinity_mask: "0,1,2,3"
+    server:
+      args:
+        tensor-parallel-size: 4
+        max-model-len: 8192
+        max-num-batched-tokens: 4096
+        quantization: fp8
+
+  # - name: Qwen3.5-27B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 2
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: sym_int4
+  #   # 可选：这一模型单独裁剪测试矩阵（例：不跑 65536）
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
+
+  # - name: Qwen3.5-27B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: fp8
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
+
+  # - name: Qwen3.5-35B-A3B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: sym_int4
+  #   # 可选：这一模型单独裁剪测试矩阵（例：不跑 65536）
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
+
+  # - name: Qwen3.5-35B-A3B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: fp8
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
+
+  # - name: Qwen3.5-122B-A10B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: sym_int4
+  #   # 可选：这一模型单独裁剪测试矩阵（例：不跑 65536）
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
+
+  # - name: Qwen3.5-122B-A10B
+  #   ze_affinity_mask: "0,1,2,3"             # 设置 container 内 GPU 可见
+  #   # model_path: /custom/absolute/path     # 可选：覆盖默认 {container_model_dir}/{name}
+  #   server:
+  #     args:
+  #       tensor-parallel-size: 4
+  #       max-model-len: 70000
+  #       max-num-batched-tokens: 8192
+  #       quantization: fp8
+  #   tests:
+  #     perf:
+  #       input_len: [1024]
