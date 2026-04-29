@@ -82,21 +82,20 @@ def parse_log(log_path: Path) -> dict:
 
     # Parse lm_eval results
     current_lm_task = ""
+    original_lm_task = ""
     for line in lines:
         m = LM_EVAL_SECTION.search(line)
         if m:
-            current_lm_task = m.group(1)
+            original_lm_task = m.group(1)
+            current_lm_task = original_lm_task
             continue
         if current_lm_task:
             m = LM_EVAL_ROW.search(line)
             if m:
-                task = m.group(1).strip()
                 metric = m.group(2).strip()
                 value = m.group(3).strip()
-                if task and task.lower() not in ("tasks", "-"):
-                    current_lm_task = task
                 if metric in ("acc", "acc_norm"):
-                    result["lm_eval"].setdefault(current_lm_task, {})[metric] = value
+                    result["lm_eval"].setdefault(original_lm_task, {})[metric] = value
 
     # Parse perf sections
     i = 0

@@ -134,7 +134,13 @@ def run(
             continue
 
         parsed = parse_lm_eval_output(output)
+        # Match by exact name first, then try suffix match (e.g. mmlu_high_school_... -> high_school_...)
         metrics = parsed.get(task_name, {})
+        if not metrics:
+            for key, val in parsed.items():
+                if task_name.endswith(key) or key.endswith(task_name):
+                    metrics = val
+                    break
         result.tasks.append(LmEvalTaskResult(
             task=task_name, limit=limit, metrics=metrics,
             ok=len(metrics) > 0,
