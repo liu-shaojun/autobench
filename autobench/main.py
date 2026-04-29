@@ -56,7 +56,8 @@ def main(argv: list[str] | None = None) -> int:
 
     state = RunState(run_id=run_id, results_dir=results_dir)
     for m in cfg.models:
-        state.init_model(m.label, m.perf.combinations() if m.perf.enabled else [])
+        tp = int(m.server_args.get("tensor-parallel-size", 1))
+        state.init_model(m.label, m.perf.combinations() if m.perf.enabled else [], tp=tp)
 
     def _shutdown_handler(signum, frame):
         print(f"\n[autobench] received signal {signum}, cleaning up...")
@@ -78,8 +79,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[autobench] models: {[m.label for m in cfg.models]}")
     for m in cfg.models:
         print(f"  - {m.label}  path={m.model_path}")
+        if m.smoke.enabled:
+            print(f"    smoke: 5 prompts")
         if m.gsm8k.enabled:
             print(f"    gsm8k: {m.gsm8k.num_questions} questions")
+        if m.lm_eval.enabled:
+            task_names = [t["name"] for t in m.lm_eval.tasks]
+            print(f"    lm_eval: {task_names}")
         if m.perf.enabled:
             p = m.perf
             print(f"    perf: concurrency={p.concurrency}  input_len={p.input_len}  output_len={p.output_len}")

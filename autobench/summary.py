@@ -18,46 +18,74 @@ METRIC_COLS = [
 ]
 
 
-COLS = [
-    "model", "gsm8k_accuracy", "gsm8k_ok",
+BASE_COLS = [
+    "model", "tp", "smoke_ok", "gsm8k_accuracy", "gsm8k_ok",
+]
+
+PERF_COLS = [
     "concurrency", "input_len", "output_len",
     "status", "error",
     *METRIC_COLS,
 ]
 
 
+def _lm_eval_cols(state: RunState) -> list[str]:
+    """Collect all unique lm_eval task names across models for dynamic columns."""
+    tasks: list[str] = []
+    seen: set[str] = set()
+    for m in state.models.values():
+        for task in m.lm_eval_results:
+            if task not in seen:
+                tasks.append(task)
+                seen.add(task)
+    return tasks
+
+
+def _lm_eval_values(m: ModelState, lm_cols: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for task in lm_cols:
+        metrics = m.lm_eval_results.get(task, {})
+        if "error" in metrics:
+            out[task] = "fail"
+        elif metrics:
+            acc = metrics.get("acc_norm", metrics.get("acc", 0))
+            out[task] = f"{acc:.4f}"
+        else:
+            out[task] = ""
+    return out
+
+
 def write(state: RunState, path: Path) -> None:
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
+        lm_cols = _lm_eval_cols(state)
+        cols = BASE_COLS + lm_cols + PERF_COLS
         with path.open("w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=COLS)
+            w = csv.DictWriter(f, fieldnames=cols)
             w.writeheader()
             for name, m in state.models.items():
+                base = {
+                    "model": name,
+                    "tp": m.tp,
+                    "smoke_ok": "yes" if m.smoke_ok else ("no" if m.smoke_ok is False else ""),
+                    "gsm8k_accuracy": f"{m.accuracy:.2f}" if m.accuracy is not None else "",
+                    "gsm8k_ok": "yes" if m.accuracy_ok else "no",
+                }
+                base.update(_lm_eval_values(m, lm_cols))
                 if not m.perf_entries:
-                    # Emit one row so failed/no-perf models still show up
-                    w.writerow(_row_for_model_no_perf(m))
+                    row = {c: "" for c in cols}
+                    row.update(base)
+                    row["status"] = m.stage
+                    row["error"] = m.error or ""
+                    w.writerow(row)
                     continue
                 for e in m.perf_entries:
-                    row = {
-                        "model": name,
-                        "gsm8k_accuracy": f"{m.accuracy:.2f}" if m.accuracy is not None else "",
-                        "gsm8k_ok": "yes" if m.accuracy_ok else "no",
-                        "concurrency": e.concurrency,
-                        "input_len": e.input_len,
-                        "output_len": e.output_len,
-                        "status": e.status,
-                        "error": e.error or "",
-                    }
+                    row = dict(base)
+                    row["concurrency"] = e.concurrency
+                    row["input_len"] = e.input_len
+                    row["output_len"] = e.output_len
+                    row["status"] = e.status
+                    row["error"] = e.error or ""
                     for c in METRIC_COLS:
                         row[c] = f"{e.metrics[c]:.4f}" if c in e.metrics else ""
                     w.writerow(row)
-
-
-def _row_for_model_no_perf(m: ModelState) -> dict:
-    row = {c: "" for c in COLS}
-    row["model"] = m.name
-    row["gsm8k_accuracy"] = f"{m.accuracy:.2f}" if m.accuracy is not None else ""
-    row["gsm8k_ok"] = "yes" if m.accuracy_ok else "no"
-    row["status"] = m.stage
-    row["error"] = m.error or ""
-    return row

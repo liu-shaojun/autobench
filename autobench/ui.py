@@ -14,7 +14,9 @@ _STAGE_STYLE = {
     "container_up": "cyan",
     "server_starting": "yellow",
     "server_ready": "yellow",
+    "smoke": "yellow",
     "accuracy": "yellow",
+    "lm_eval": "cyan",
     "warmup": "yellow",
     "perf": "magenta",
     "done": "green",
@@ -46,11 +48,27 @@ def _fmt_perf(m: ModelState) -> str:
     return f"[{color}]{bar}[/{color}] {done}/{total}" + (f" ([red]{fail} fail[/red])" if fail else "")
 
 
+def _fmt_lm_eval(m: ModelState) -> str:
+    if not m.lm_eval_results:
+        return "-"
+    parts = []
+    for task, metrics in m.lm_eval_results.items():
+        if "error" in metrics:
+            parts.append(f"[red]{task}:fail[/red]")
+        else:
+            acc = metrics.get("acc_norm", metrics.get("acc", 0))
+            parts.append(f"{task}:{acc:.2f}")
+    return " ".join(parts)
+
+
 def render(state: RunState) -> Table:
     table = Table(title=f"autobench run {state.run_id}")
     table.add_column("Model", overflow="fold")
+    table.add_column("TP", justify="right")
     table.add_column("Stage")
+    table.add_column("Smoke", justify="center")
     table.add_column("GSM8K", justify="right")
+    table.add_column("LM-Eval", justify="left")
     table.add_column("Perf", justify="left")
     table.add_column("Error", overflow="ellipsis", max_width=40, no_wrap=True)
 
@@ -59,10 +77,18 @@ def render(state: RunState) -> Table:
         if m.stage == "failed" and m.error:
             first_line = m.error.split("\n")[0][:60]
             err = f"[red]{first_line}[/red]"
+        smoke = "-"
+        if m.smoke_ok is True:
+            smoke = "[green]ok[/green]"
+        elif m.smoke_ok is False:
+            smoke = "[red]fail[/red]"
         table.add_row(
             name,
+            str(m.tp),
             _fmt_stage(m.stage),
+            smoke,
             _fmt_accuracy(m),
+            _fmt_lm_eval(m),
             _fmt_perf(m),
             err,
         )

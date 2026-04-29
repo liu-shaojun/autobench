@@ -9,6 +9,11 @@ import yaml
 
 
 @dataclass
+class SmokeConfig:
+    enabled: bool
+
+
+@dataclass
 class GSM8KConfig:
     enabled: bool
     num_questions: int
@@ -35,6 +40,13 @@ class PerfConfig:
 
 
 @dataclass
+class LmEvalConfig:
+    enabled: bool
+    tasks: list[dict]
+    timeout_sec: int
+
+
+@dataclass
 class ModelConfig:
     name: str
     label: str                      # unique display key (e.g. "Qwen3.5-27B_sym_int4")
@@ -55,7 +67,9 @@ class ModelConfig:
     server_env: dict[str, str]
     server_args: dict[str, Any]
     model_path: str                 # absolute path inside container
+    smoke: SmokeConfig
     gsm8k: GSM8KConfig
+    lm_eval: LmEvalConfig
     perf: PerfConfig
 
 
@@ -76,11 +90,23 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+def _build_smoke(d: dict) -> SmokeConfig:
+    return SmokeConfig(enabled=bool(d.get("enabled", True)))
+
+
 def _build_gsm8k(d: dict) -> GSM8KConfig:
     return GSM8KConfig(
         enabled=bool(d.get("enabled", True)),
         num_questions=int(d.get("num_questions", 100)),
         timeout_sec=int(d.get("timeout_sec", 1800)),
+    )
+
+
+def _build_lm_eval(d: dict) -> LmEvalConfig:
+    return LmEvalConfig(
+        enabled=bool(d.get("enabled", False)),
+        tasks=list(d.get("tasks", [])),
+        timeout_sec=int(d.get("timeout_sec", 3600)),
     )
 
 
@@ -112,17 +138,26 @@ def load(config_path: Path) -> RunConfig:
 
         # merge tests (defaults <- per-model overrides)
         tests_merged = _deep_merge(tests_defaults, entry.get("tests", {}) or {})
+        smoke = _build_smoke(tests_merged.get("smoke", {}) or {})
         gsm8k = _build_gsm8k(tests_merged.get("gsm8k", {}) or {})
+        lm_eval = _build_lm_eval(tests_merged.get("lm_eval", {}) or {})
         perf = _build_perf(tests_merged.get("perf", {}) or {})
 
         container_model_dir = docker_cfg.get("container_model_dir", "/llm/models")
         model_path = entry.get("model_path") or f"{container_model_dir}/{name}"
 
-        # Build unique label: use explicit label, or auto-generate from name + quantization
+        # Build unique label: use explicit label, or auto-generate from name + tp + quantization
         label = entry.get("label")
         if not label:
-            quant = (server_merged.get("args") or {}).get("quantization")
-            label = f"{name}_{quant}" if quant else name
+            args = server_merged.get("args") or {}
+            tp = args.get("tensor-parallel-size")
+            quant = args.get("quantization")
+            parts = [name]
+            if tp:
+                parts.append(f"tp{tp}")
+            if quant:
+                parts.append(str(quant))
+            label = "_".join(parts)
 
         models.append(ModelConfig(
             name=name,
@@ -144,7 +179,9 @@ def load(config_path: Path) -> RunConfig:
             server_env=dict(server_merged.get("env", {}) or {}),
             server_args=dict(server_merged.get("args", {}) or {}),
             model_path=model_path,
+            smoke=smoke,
             gsm8k=gsm8k,
+            lm_eval=lm_eval,
             perf=perf,
         ))
 

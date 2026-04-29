@@ -21,14 +21,17 @@ class PerfEntry:
 @dataclass
 class ModelState:
     name: str
+    tp: int = 0
     stage: str = "pending"    # pending, container_up, server_starting, server_ready,
                               # accuracy, perf, done, failed
     container_status: str = "-"
     server_status: str = "-"
     accuracy: float | None = None
+    smoke_ok: bool | None = None
     accuracy_ok: bool = False
     accuracy_error: str | None = None
     error: str | None = None
+    lm_eval_results: dict[str, dict[str, float]] = field(default_factory=dict)
     perf_entries: list[PerfEntry] = field(default_factory=list)
 
     def perf_counts(self) -> tuple[int, int, int]:
@@ -61,9 +64,9 @@ class RunState:
                 pass
 
     # ---- mutation ----
-    def init_model(self, name: str, combos: list[tuple[int, int, int]]) -> None:
+    def init_model(self, name: str, combos: list[tuple[int, int, int]], *, tp: int = 0) -> None:
         with self._lock:
-            m = ModelState(name=name)
+            m = ModelState(name=name, tp=tp)
             m.perf_entries = [PerfEntry(c, i, o) for (c, i, o) in combos]
             self.models[name] = m
         self._flush()
@@ -87,6 +90,12 @@ class RunState:
         self._flush()
         self._notify()
 
+    def set_smoke(self, name: str, result) -> None:
+        with self._lock:
+            self.models[name].smoke_ok = result.ok
+        self._flush()
+        self._notify()
+
     def set_perf(self, name: str, c: int, i: int, o: int, *, status: str,
                  metrics: dict[str, float] | None = None, error: str | None = None) -> None:
         with self._lock:
@@ -98,6 +107,14 @@ class RunState:
                         e.metrics = metrics
                     e.error = error
                     break
+        self._flush()
+        self._notify()
+
+    def set_lm_eval(self, name: str, result) -> None:
+        with self._lock:
+            m = self.models[name]
+            for t in result.tasks:
+                m.lm_eval_results[t.task] = t.metrics if t.ok else {"error": t.error or "failed"}
         self._flush()
         self._notify()
 
@@ -117,13 +134,16 @@ class RunState:
             "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "models": {
                 name: {
+                    "tp": m.tp,
                     "stage": m.stage,
                     "container_status": m.container_status,
                     "server_status": m.server_status,
+                    "smoke_ok": m.smoke_ok,
                     "accuracy": m.accuracy,
                     "accuracy_ok": m.accuracy_ok,
                     "accuracy_error": m.accuracy_error,
                     "error": m.error,
+                    "lm_eval": m.lm_eval_results,
                     "perf": [
                         {
                             "concurrency": e.concurrency,

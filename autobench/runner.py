@@ -6,8 +6,10 @@ from pathlib import Path
 
 from . import accuracy as accuracy_mod
 from . import container as container_mod
+from . import lm_eval as lm_eval_mod
 from . import perf as perf_mod
 from . import server as server_mod
+from . import smoke as smoke_mod
 from . import summary as summary_mod
 from .config import ModelConfig
 from .logutil import ModelLogger
@@ -57,7 +59,17 @@ def run_model(
             state.set_stage(model.label, "failed", server_status="fail", error=f"server: {e}")
             return
 
-        # 3. accuracy (gsm8k) — per-model switch
+        # 3. smoke test
+        if model.smoke.enabled:
+            state.set_stage(model.label, "smoke")
+            try:
+                smoke_result = smoke_mod.run(model, cname, logger, dry_run=dry_run)
+                state.set_smoke(model.label, smoke_result)
+            except Exception as e:
+                logger.section("SMOKE_EXCEPTION")
+                logger.write(traceback.format_exc())
+
+        # 4. accuracy (gsm8k) — per-model switch
         if not model.gsm8k.enabled:
             state.set_accuracy(model.label, accuracy=None, ok=True, error="disabled")
         else:
@@ -80,7 +92,22 @@ def run_model(
                 logger.write(traceback.format_exc())
                 state.set_accuracy(model.label, accuracy=None, ok=False, error=str(e))
 
-        # 4. perf matrix — per-model switch
+        # 4. lm_eval — per-model switch
+        if model.lm_eval.enabled:
+            state.set_stage(model.label, "lm_eval")
+            try:
+                lm_result = lm_eval_mod.run(
+                    model, cname, logger,
+                    tasks=model.lm_eval.tasks,
+                    timeout_sec=model.lm_eval.timeout_sec,
+                    dry_run=dry_run,
+                )
+                state.set_lm_eval(model.label, lm_result)
+            except Exception as e:
+                logger.section("LM_EVAL_EXCEPTION")
+                logger.write(traceback.format_exc())
+
+        # 5. perf matrix — per-model switch
         if model.perf.enabled:
             state.set_stage(model.label, "warmup")
             logger.section("WARMUP")
