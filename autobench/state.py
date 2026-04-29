@@ -27,10 +27,11 @@ class ModelState:
     container_status: str = "-"
     server_status: str = "-"
     accuracy: float | None = None
-    smoke_ok: bool | None = None
+    smoke_status: str = ""   # "", "ok", "fail", "disabled"
     accuracy_ok: bool = False
     accuracy_error: str | None = None
     error: str | None = None
+    lm_eval_disabled: bool = False
     lm_eval_results: dict[str, dict[str, float]] = field(default_factory=dict)
     perf_entries: list[PerfEntry] = field(default_factory=list)
 
@@ -49,6 +50,7 @@ class RunState:
         self.status_path = results_dir / "status.json"
         self.started_at = datetime.datetime.now().isoformat(timespec="seconds")
         self.models: dict[str, ModelState] = {}
+        self.lm_eval_task_names: list[str] = []
         self._lock = threading.Lock()
         self._observers: list = []
 
@@ -90,9 +92,15 @@ class RunState:
         self._flush()
         self._notify()
 
+    def set_smoke_disabled(self, name: str) -> None:
+        with self._lock:
+            self.models[name].smoke_status = "disabled"
+        self._flush()
+        self._notify()
+
     def set_smoke(self, name: str, result) -> None:
         with self._lock:
-            self.models[name].smoke_ok = result.ok
+            self.models[name].smoke_status = "ok" if result.ok else "fail"
         self._flush()
         self._notify()
 
@@ -107,6 +115,12 @@ class RunState:
                         e.metrics = metrics
                     e.error = error
                     break
+        self._flush()
+        self._notify()
+
+    def set_lm_eval_disabled(self, name: str) -> None:
+        with self._lock:
+            self.models[name].lm_eval_disabled = True
         self._flush()
         self._notify()
 
@@ -138,7 +152,7 @@ class RunState:
                     "stage": m.stage,
                     "container_status": m.container_status,
                     "server_status": m.server_status,
-                    "smoke_ok": m.smoke_ok,
+                    "smoke_status": m.smoke_status,
                     "accuracy": m.accuracy,
                     "accuracy_ok": m.accuracy_ok,
                     "accuracy_error": m.accuracy_error,

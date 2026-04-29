@@ -55,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
     results_dir.mkdir(parents=True, exist_ok=True)
 
     state = RunState(run_id=run_id, results_dir=results_dir)
+    # Collect all lm_eval task names from config (for consistent CSV columns)
+    seen_tasks: set[str] = set()
+    for m in cfg.models:
+        if m.lm_eval.enabled:
+            for t in m.lm_eval.tasks:
+                seen_tasks.add(t["name"])
+    state.lm_eval_task_names = sorted(seen_tasks)
+
     for m in cfg.models:
         tp = int(m.server_args.get("tensor-parallel-size", 1))
         state.init_model(m.label, m.perf.combinations() if m.perf.enabled else [], tp=tp)

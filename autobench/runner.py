@@ -60,7 +60,9 @@ def run_model(
             return
 
         # 3. smoke test
-        if model.smoke.enabled:
+        if not model.smoke.enabled:
+            state.set_smoke_disabled(model.label)
+        elif model.smoke.enabled:
             state.set_stage(model.label, "smoke")
             try:
                 smoke_result = smoke_mod.run(model, cname, logger, dry_run=dry_run)
@@ -93,7 +95,9 @@ def run_model(
                 state.set_accuracy(model.label, accuracy=None, ok=False, error=str(e))
 
         # 4. lm_eval — per-model switch
-        if model.lm_eval.enabled:
+        if not model.lm_eval.enabled:
+            state.set_lm_eval_disabled(model.label)
+        elif model.lm_eval.enabled:
             state.set_stage(model.label, "lm_eval")
             try:
                 lm_result = lm_eval_mod.run(

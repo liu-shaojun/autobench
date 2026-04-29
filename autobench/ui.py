@@ -32,6 +32,8 @@ def _fmt_stage(stage: str) -> str:
 def _fmt_accuracy(m: ModelState) -> str:
     if m.accuracy is not None:
         return f"[green]{m.accuracy:.1f}%[/green]"
+    if m.accuracy_error == "disabled":
+        return "[dim]skip[/dim]"
     if m.accuracy_error:
         return f"[red]fail[/red]"
     return "-"
@@ -49,6 +51,8 @@ def _fmt_perf(m: ModelState) -> str:
 
 
 def _fmt_lm_eval(m: ModelState) -> str:
+    if m.lm_eval_disabled:
+        return "[dim]skip[/dim]"
     if not m.lm_eval_results:
         return "-"
     parts = []
@@ -78,10 +82,12 @@ def render(state: RunState) -> Table:
             first_line = m.error.split("\n")[0][:60]
             err = f"[red]{first_line}[/red]"
         smoke = "-"
-        if m.smoke_ok is True:
+        if m.smoke_status == "ok":
             smoke = "[green]ok[/green]"
-        elif m.smoke_ok is False:
+        elif m.smoke_status == "fail":
             smoke = "[red]fail[/red]"
+        elif m.smoke_status == "disabled":
+            smoke = "[dim]skip[/dim]"
         table.add_row(
             name,
             str(m.tp),

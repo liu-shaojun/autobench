@@ -30,15 +30,8 @@ PERF_COLS = [
 
 
 def _lm_eval_cols(state: RunState) -> list[str]:
-    """Collect all unique lm_eval task names across models for dynamic columns."""
-    tasks: list[str] = []
-    seen: set[str] = set()
-    for m in state.models.values():
-        for task in m.lm_eval_results:
-            if task not in seen:
-                tasks.append(task)
-                seen.add(task)
-    return tasks
+    """Return lm_eval task names from config for consistent CSV columns."""
+    return state.lm_eval_task_names
 
 
 def _lm_eval_values(m: ModelState, lm_cols: list[str]) -> dict[str, str]:
@@ -67,9 +60,9 @@ def write(state: RunState, path: Path) -> None:
                 base = {
                     "model": name,
                     "tp": m.tp,
-                    "smoke_ok": "yes" if m.smoke_ok else ("no" if m.smoke_ok is False else ""),
-                    "gsm8k_accuracy": f"{m.accuracy:.2f}" if m.accuracy is not None else "",
-                    "gsm8k_ok": "yes" if m.accuracy_ok else "no",
+                    "smoke_ok": {"ok": "yes", "fail": "no", "disabled": "skip"}.get(m.smoke_status, ""),
+                    "gsm8k_accuracy": f"{m.accuracy:.2f}%" if m.accuracy is not None else "",
+                    "gsm8k_ok": "skip" if m.accuracy_error == "disabled" else ("yes" if m.accuracy_ok else "no"),
                 }
                 base.update(_lm_eval_values(m, lm_cols))
                 if not m.perf_entries:
