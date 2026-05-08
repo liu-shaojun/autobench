@@ -12,6 +12,7 @@ from .logutil import ModelLogger
 
 GSM8K_URL = "http://xin-dev.sh.intel.com/share/gsm8k_eval.py"
 GSM8K_SCRIPT = "/tmp/gsm8k_eval.py"
+GSM8K_NO_THINK_SCRIPT = "/tmp/gsm8k_no_think.py"
 DEFAULT_NUM_QUESTIONS = 100
 
 
@@ -53,16 +54,34 @@ def run(
     timeout_sec: int = 1800,
     dry_run: bool = False,
 ) -> AccuracyResult:
-    logger.section(f"GSM8K num_questions={num_questions}")
-    if not dry_run:
-        dl_cmd = f"curl --noproxy '*' -sf -o {GSM8K_SCRIPT} {shlex.quote(GSM8K_URL)}"
-        logger.write(f"[gsm8k] downloading script: {dl_cmd}")
-        container.exec_sync(cname, dl_cmd)
+    script_mode = model.gsm8k.script
+    logger.section(f"GSM8K num_questions={num_questions} script={script_mode}")
 
-    cmd = (
-        f"python3 {shlex.quote(GSM8K_SCRIPT)} "
-        f"--port {model.port} --num-questions {num_questions}"
-    )
+    if script_mode == "no_think":
+        # Copy bundled gsm8k_no_think.py into container
+        if not dry_run:
+            from pathlib import Path
+            local_script = Path(__file__).parent / "gsm8k_no_think.py"
+            container.exec_sync(cname, f"cat > {GSM8K_NO_THINK_SCRIPT}", timeout=10)
+            import subprocess as _sp
+            _sp.run(
+                ["docker", "cp", str(local_script), f"{cname}:{GSM8K_NO_THINK_SCRIPT}"],
+                check=True,
+            )
+        cmd = (
+            f"python3 {shlex.quote(GSM8K_NO_THINK_SCRIPT)} "
+            f"--port {model.port} --num-questions {num_questions} "
+            f"--model-name {shlex.quote(model.name)}"
+        )
+    else:
+        if not dry_run:
+            dl_cmd = f"curl --noproxy '*' -sf -o {GSM8K_SCRIPT} {shlex.quote(GSM8K_URL)}"
+            logger.write(f"[gsm8k] downloading script: {dl_cmd}")
+            container.exec_sync(cname, dl_cmd)
+        cmd = (
+            f"python3 {shlex.quote(GSM8K_SCRIPT)} "
+            f"--port {model.port} --num-questions {num_questions}"
+        )
     logger.write(f"(in container {cname}) {cmd}")
     if dry_run:
         return AccuracyResult(accuracy=None, num_questions=num_questions, raw_output="", ok=True)

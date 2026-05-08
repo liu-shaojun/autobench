@@ -18,6 +18,7 @@ class GSM8KConfig:
     enabled: bool
     num_questions: int
     timeout_sec: int
+    script: str   # "default" or "no_think"
 
 
 @dataclass
@@ -99,6 +100,7 @@ def _build_gsm8k(d: dict) -> GSM8KConfig:
         enabled=bool(d.get("enabled", True)),
         num_questions=int(d.get("num_questions", 100)),
         timeout_sec=int(d.get("timeout_sec", 1800)),
+        script=str(d.get("script", "default")),
     )
 
 
