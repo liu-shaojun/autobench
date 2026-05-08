@@ -57,7 +57,7 @@ async def call_chat_api(session, prompt, temperature, max_tokens, url, model_nam
 
 async def main():
     import argparse
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description="GSM8K evaluation (thinking disabled)")
     p.add_argument("--num-questions", type=int, default=300)
     p.add_argument("--num-shots", type=int, default=5)
     p.add_argument("--max-tokens", type=int, default=512)
@@ -91,6 +91,8 @@ async def main():
         output_tokens[i] = tokens
         return text, tokens
 
+    print(f"Running GSM8K evaluation (thinking disabled): {num_questions} questions, {args.num_shots}-shot")
+
     start = time.time()
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
         tasks = [get_answer(session, i) for i in range(num_questions)]
@@ -101,6 +103,24 @@ async def main():
     accuracy = np.mean(np.array(preds) == np.array(labels))
     invalid_rate = np.mean(np.array(preds) == INVALID)
     total_tokens = sum(output_tokens)
+
+    # Print up to 5 INVALID responses for debugging
+    invalid_indices = [i for i, pred in enumerate(preds) if pred == INVALID]
+    if invalid_indices:
+        print(f"\n=== {len(invalid_indices)} INVALID responses, showing first 5 ===")
+        for idx in invalid_indices[:5]:
+            print(f"\n--- Question {idx} (expected: {labels[idx]}) ---")
+            print(f"Raw response: {states[idx]!r}")
+            print("---")
+
+    # Print up to 5 WRONG (but valid) responses for debugging
+    wrong_indices = [i for i, pred in enumerate(preds) if pred != INVALID and pred != labels[i]]
+    if wrong_indices:
+        print(f"\n=== {len(wrong_indices)} WRONG responses, showing first 5 ===")
+        for idx in wrong_indices[:5]:
+            print(f"\n--- Question {idx} (expected: {labels[idx]}, got: {preds[idx]}) ---")
+            print(f"Raw response: {states[idx]!r}")
+            print("---")
 
     print(f"\nResults (thinking disabled):")
     print(f"Accuracy: {accuracy:.3f}")
