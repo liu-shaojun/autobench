@@ -96,7 +96,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    lm_eval: {task_names}")
         if m.perf.enabled:
             p = m.perf
-            print(f"    perf: concurrency={p.concurrency}  input_len={p.input_len}  output_len={p.output_len}")
+            if p.groups:
+                print(f"    perf: {len(p.combinations())} combos (from {len(p.groups)} groups)")
+                for idx, g in enumerate(p.groups, 1):
+                    cs = g.get("concurrency", p.concurrency)
+                    ins = g.get("input_len", p.input_len)
+                    outs = g.get("output_len", p.output_len)
+                    print(f"      group {idx}: concurrency={cs}  input_len={ins}  output_len={outs}")
+            else:
+                print(f"    perf: concurrency={p.concurrency}  input_len={p.input_len}  output_len={p.output_len}")
 
     def _drive() -> None:
         for m in cfg.models:

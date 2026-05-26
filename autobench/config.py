@@ -30,8 +30,24 @@ class PerfConfig:
     num_prompts_multiplier: int
     request_rate: str
     timeout_sec: int
+    groups: list[dict] = field(default_factory=list)
 
     def combinations(self) -> list[tuple[int, int, int]]:
+        if self.groups:
+            seen: set[tuple[int, int, int]] = set()
+            out: list[tuple[int, int, int]] = []
+            for g in self.groups:
+                cs = g.get("concurrency", self.concurrency)
+                ins = g.get("input_len", self.input_len)
+                outs = g.get("output_len", self.output_len)
+                for c in cs:
+                    for i in ins:
+                        for o in outs:
+                            key = (c, i, o)
+                            if key not in seen:
+                                seen.add(key)
+                                out.append(key)
+            return out
         return [
             (c, i, o)
             for c in self.concurrency
@@ -121,6 +137,7 @@ def _build_perf(d: dict) -> PerfConfig:
         num_prompts_multiplier=int(d.get("num_prompts_multiplier", 1)),
         request_rate=str(d.get("request_rate", "inf")),
         timeout_sec=int(d.get("timeout_sec", 3600)),
+        groups=list(d.get("groups", []) or []),
     )
 
 
