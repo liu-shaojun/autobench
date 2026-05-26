@@ -94,7 +94,7 @@ async def main():
     print(f"Running GSM8K evaluation (thinking disabled): {num_questions} questions, {args.num_shots}-shot")
 
     start = time.time()
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1200)) as session:
         tasks = [get_answer(session, i) for i in range(num_questions)]
         await tqdm.gather(*tasks)
     latency = time.time() - start

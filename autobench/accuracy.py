@@ -10,7 +10,6 @@ from .config import ModelConfig
 from .logutil import ModelLogger
 
 
-GSM8K_URL = "http://xin-dev.sh.intel.com/share/gsm8k_eval.py"
 GSM8K_SCRIPT = "/tmp/gsm8k_eval.py"
 GSM8K_NO_THINK_SCRIPT = "/tmp/gsm8k_no_think.py"
 DEFAULT_NUM_QUESTIONS = 100
@@ -75,9 +74,14 @@ def run(
         )
     else:
         if not dry_run:
-            dl_cmd = f"curl --noproxy '*' -sf -o {GSM8K_SCRIPT} {shlex.quote(GSM8K_URL)}"
-            logger.write(f"[gsm8k] downloading script: {dl_cmd}")
-            container.exec_sync(cname, dl_cmd)
+            from pathlib import Path
+            local_script = Path(__file__).parent / "gsm8k_eval.py"
+            import subprocess as _sp
+            _sp.run(
+                ["docker", "cp", str(local_script), f"{cname}:{GSM8K_SCRIPT}"],
+                check=True,
+            )
+            logger.write(f"[gsm8k] copied {local_script} -> {cname}:{GSM8K_SCRIPT}")
         cmd = (
             f"python3 {shlex.quote(GSM8K_SCRIPT)} "
             f"--port {model.port} --num-questions {num_questions}"
