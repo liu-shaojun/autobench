@@ -4,7 +4,7 @@
 #   e.g. bash smoke_test.sh Qwen3.6-27B 9005
 
 MODEL="${1:-model}"
-PORT="${2:-9005}"
+PORT="${2:-9008}"
 URL="http://localhost:${PORT}/v1"
 PASS=0
 FAIL=0
@@ -16,12 +16,12 @@ smoke() {
     if [ "$mode" = "chat" ]; then
         resp=$(curl -s --max-time 30 -X POST "${URL}/chat/completions" \
             -H "Content-Type: application/json" \
-            -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"${prompt}\"}],\"max_tokens\":150,\"temperature\":0}" \
+            -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"${prompt}\"}],\"max_tokens\":250,\"temperature\":0}" \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:200])" 2>/dev/null)
     else
         resp=$(curl -s --max-time 30 -X POST "${URL}/completions" \
             -H "Content-Type: application/json" \
-            -d "{\"model\":\"${MODEL}\",\"prompt\":\"${prompt}\",\"max_tokens\":30,\"temperature\":0}" \
+            -d "{\"model\":\"${MODEL}\",\"prompt\":\"${prompt}\",\"max_tokens\":60,\"temperature\":0}" \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['text'][:200])" 2>/dev/null)
     fi
 
